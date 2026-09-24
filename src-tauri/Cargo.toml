@@ -1,0 +1,64 @@
+[package]
+name = "sobre"
+version = "0.1.0"
+description = "A small local email client"
+authors = ["Marcos"]
+license = "MIT"
+repository = "https://github.com/margual56/Sobre"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "sobre_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-single-instance = "2.5.2"
+tauri-plugin-autostart = "2.7.0"
+tauri-plugin-notification = "2.5.1"
+tauri-plugin-dialog = "2.8.1"
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "rt"] }
+rusqlite = { version = "0.40.2", features = ["bundled-sqlcipher-vendored-openssl"] }
+async-imap = { version = "0.12.0", default-features = false, features = ["runtime-tokio"] }
+lettre = { version = "0.11.23", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder"] }
+tokio-rustls = "0.26.6"
+rustls-native-certs = "0.8.4"
+mail-parser = "0.11.9"
+mail-auth = "0.13.3"
+ammonia = "4.2.1"
+pulldown-cmark = "0.13.4"
+keyring = "4.2.0"
+argon2 = "0.6.0"
+zeroize = "1.9.1"
+rand = "0.10.3"
+thiserror = "2.0.21"
+anyhow = "1.0.104"
+log = "0.4.34"
+futures = "0.3.34"
+base64 = "0.23.1"
+url = "2.5.8"
+hickory-resolver = "0.26.3"
+chrono = "0.4.45"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json"] }
+sha2 = "0.11.0"
+rustls = "0.23.45"
+
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
