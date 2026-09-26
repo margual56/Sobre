@@ -1,6 +1,7 @@
 pub mod db;
 pub mod mail;
 pub mod render;
+pub mod trust;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
