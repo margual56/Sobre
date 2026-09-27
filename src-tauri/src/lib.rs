@@ -1,5 +1,6 @@
 pub mod db;
 pub mod mail;
+pub mod net;
 pub mod render;
 pub mod trust;
 
