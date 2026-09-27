@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod db;
 pub mod mail;
 pub mod net;
