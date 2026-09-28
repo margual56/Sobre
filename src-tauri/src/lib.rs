@@ -3,6 +3,7 @@ pub mod db;
 pub mod mail;
 pub mod net;
 pub mod render;
+pub mod state;
 pub mod trust;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
