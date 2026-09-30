@@ -1,4 +1,5 @@
 pub mod accounts;
+pub mod actions;
 pub mod db;
 pub mod mail;
 pub mod net;
