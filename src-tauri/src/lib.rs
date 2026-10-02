@@ -1,6 +1,7 @@
 pub mod accounts;
 pub mod actions;
 pub mod db;
+pub mod icons;
 pub mod mail;
 pub mod net;
 pub mod render;

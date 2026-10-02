@@ -1,4 +1,5 @@
 pub mod detect;
+pub mod protocol;
 pub mod sanitize;
 
 use pulldown_cmark::{html, Options, Parser};
