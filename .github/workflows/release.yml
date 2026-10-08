@@ -1,0 +1,145 @@
+# Every push to main is examined for conventional commits. If any of them
+# warrants a release, the next version is computed from the last tag, the app
+# is built for Linux and a GitHub release is published with the packages.
+#
+#   feat:                      minor   (0.3.1 -> 0.4.0)
+#   fix: / perf:               patch   (0.3.1 -> 0.3.2)
+#   type!: / BREAKING CHANGE   major   (1.3.1 -> 2.0.0; while below 1.0, minor)
+#   docs, chore, ci, test, refactor, style, build: no release
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # An older Ubuntu keeps the binary usable on distributions with an older glibc.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out the next version
+        id: version
+        run: |
+          last=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+          if [ -n "$last" ]; then range="$last..HEAD"; current="${last#v}"; else range="HEAD"; current="0.0.0"; fi
+
+          subjects=$(git log --no-merges --format='%s' "$range")
+          bodies=$(git log --no-merges --format='%B' "$range")
+
+          bump=none
+          if echo "$subjects" | grep -qE '^[a-z]+(\([^)]*\))?!:' || echo "$bodies" | grep -qE '^BREAKING[ -]CHANGE:'; then
+            bump=major
+          elif echo "$subjects" | grep -qE '^feat(\([^)]*\))?:'; then
+            bump=minor
+          elif echo "$subjects" | grep -qE '^(fix|perf)(\([^)]*\))?:'; then
+            bump=patch
+          fi
+
+          IFS=. read -r major minor patch <<< "$current"
+          # Before 1.0 a breaking change moves the minor number, as semver allows.
+          if [ "$bump" = major ] && [ "$major" = 0 ]; then bump=minor; fi
+          case "$bump" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          next="$major.$minor.$patch"
+
+          if [ "$bump" = none ]; then
+            echo "No feat, fix or breaking commit since ${last:-the start}; nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git rev-parse -q --verify "refs/tags/v$next" >/dev/null; then
+            echo "Tag v$next already exists; nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          section() { # title, pattern
+            local lines
+            lines=$(echo "$subjects" | grep -E "$2" | sed -E 's/^[a-z]+(\([^)]*\))?!?: */- /' || true)
+            if [ -n "$lines" ]; then printf '### %s\n%s\n\n' "$1" "$lines"; fi
+          }
+          {
+            section "Features" '^feat(\([^)]*\))?!?:'
+            section "Fixes" '^(fix|perf)(\([^)]*\))?!?:'
+            section "Other changes" '^(refactor|docs|chore|ci|build|test|style)(\([^)]*\))?!?:'
+          } > release-notes.md
+
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$next ($bump, previous: ${last:-none})"
+
+      - name: Install system libraries
+        if: steps.version.outputs.release == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libssl-dev build-essential patchelf rpm libfuse2 file
+
+      - uses: actions/setup-node@v4
+        if: steps.version.outputs.release == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.version.outputs.release == 'true'
+
+      - uses: Swatinem/rust-cache@v2
+        if: steps.version.outputs.release == 'true'
+        with:
+          workspaces: src-tauri
+
+      # The version lives in git tags; the files are stamped for this build only.
+      - name: Stamp the version
+        if: steps.version.outputs.release == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > conf.tmp && mv conf.tmp src-tauri/tauri.conf.json
+          sed -i -E "0,/^version = \".*\"/s//version = \"$VERSION\"/" src-tauri/Cargo.toml
+
+      - name: Test
+        if: steps.version.outputs.release == 'true'
+        run: |
+          npm ci
+          npm run check
+          mkdir -p build
+          cargo test --manifest-path src-tauri/Cargo.toml --lib
+
+      - name: Build
+        if: steps.version.outputs.release == 'true'
+        env:
+          # linuxdeploy is itself an AppImage; runners have no FUSE to mount it.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: npm run tauri build
+
+      - name: Publish the release
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tar -C src-tauri/target/release -czf "sobre-$VERSION-linux-x86_64.tar.gz" sobre
+          gh release create "v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "Sobre $VERSION" \
+            --notes-file release-notes.md \
+            "sobre-$VERSION-linux-x86_64.tar.gz" \
+            src-tauri/target/release/bundle/deb/*.deb \
+            src-tauri/target/release/bundle/rpm/*.rpm \
+            src-tauri/target/release/bundle/appimage/*.AppImage
