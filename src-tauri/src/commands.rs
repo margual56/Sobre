@@ -34,6 +34,8 @@ pub struct Status {
     stage: &'static str,
     key_mode: Option<KeyMode>,
     has_tray: bool,
+    /// `missing-library`, or the error the tray gave.
+    tray_problem: Option<String>,
 }
 
 #[tauri::command]
@@ -44,10 +46,13 @@ pub fn app_status(state: Shared) -> Cmd<Status> {
         (Some(_), true) => "ready",
         (Some(_), false) => "locked",
     };
+    // Read once: taking this lock twice in one expression deadlocks.
+    let tray_problem = state.tray_problem.lock().unwrap().clone();
     Ok(Status {
         stage,
         key_mode: config.map(|c| c.mode),
-        has_tray: crate::tray_available(),
+        has_tray: tray_problem.is_none(),
+        tray_problem,
     })
 }
 

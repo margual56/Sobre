@@ -7,6 +7,7 @@ export interface Status {
   stage: Exclude<Stage, "loading">;
   key_mode: KeyMode | null;
   has_tray: boolean;
+  tray_problem: string | null;
 }
 
 export interface ServerConfig {

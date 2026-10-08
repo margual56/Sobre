@@ -255,10 +255,17 @@ pub fn run() {
                 }
             }
 
-            let has_tray = tray_available()
-                && build_tray(&handle)
-                    .map_err(|e| log::warn!("no tray icon: {e}"))
-                    .is_ok();
+            // Why there is no tray icon, when there is none; the UI warns about it.
+            let tray_problem = if !tray_available() {
+                Some("missing-library".to_string())
+            } else {
+                build_tray(&handle).err().map(|e| e.to_string())
+            };
+            if let Some(problem) = &tray_problem {
+                log::warn!("no tray icon: {problem}");
+            }
+            let has_tray = tray_problem.is_none();
+            *state.tray_problem.lock().unwrap() = tray_problem;
             let minimized = has_tray && std::env::args().any(|a| a == "--minimized");
             let nav_app = handle.clone();
             let token = state.token.clone();

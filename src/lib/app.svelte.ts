@@ -21,6 +21,7 @@ export const app = $state({
   stage: "loading" as Stage,
   keyMode: null as KeyMode | null,
   hasTray: false,
+  trayProblem: null as string | null,
   accounts: [] as Account[],
   folders: [] as Folder[],
   messages: [] as MessageRow[],
@@ -101,6 +102,7 @@ export async function refreshStatus() {
   app.stage = status.stage;
   app.keyMode = status.key_mode;
   app.hasTray = status.has_tray;
+  app.trayProblem = status.tray_problem;
   if (status.stage === "ready") {
     await loadTheme();
     await loadEverything();

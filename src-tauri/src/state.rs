@@ -63,6 +63,7 @@ pub struct AppState {
     resolver: Mutex<Option<Arc<MessageAuthenticator>>>,
     pub verify_slots: Arc<Semaphore>,
     pub temp_files: Mutex<Vec<PathBuf>>,
+    pub tray_problem: Mutex<Option<String>>,
     pub compose_drafts: Mutex<HashMap<u32, serde_json::Value>>,
     sink: Mutex<Option<EventSink>>,
 }
@@ -85,6 +86,7 @@ impl AppState {
             verify_slots: Arc::new(Semaphore::new(4)),
             temp_files: Mutex::default(),
             compose_drafts: Mutex::default(),
+            tray_problem: Mutex::default(),
             sink: Mutex::new(None),
         })
     }
