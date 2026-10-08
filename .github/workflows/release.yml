@@ -20,9 +20,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    # An older Ubuntu keeps the binary usable on distributions with an older glibc.
-    runs-on: ubuntu-22.04
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.version.outputs.release }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -82,64 +84,101 @@ jobs:
           echo "version=$next" >> "$GITHUB_OUTPUT"
           echo "Releasing v$next ($bump, previous: ${last:-none})"
 
-      - name: Install system libraries
+      - uses: actions/upload-artifact@v4
         if: steps.version.outputs.release == 'true'
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  # Runs on every push, alongside the build, so a release does not wait for it.
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev build-essential
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          # Keep the dependency cache even when a test fails.
+          cache-on-failure: true
+      - run: npm ci
+      - run: npm run check
+      - run: mkdir -p build && cargo test --manifest-path src-tauri/Cargo.toml --lib
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    # An older Ubuntu keeps the binary usable on distributions with an older glibc.
+    runs-on: ubuntu-22.04
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install system libraries
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
             libssl-dev build-essential patchelf rpm libfuse2 file
-
       - uses: actions/setup-node@v4
-        if: steps.version.outputs.release == 'true'
         with:
           node-version: 22
           cache: npm
-
       - uses: dtolnay/rust-toolchain@stable
-        if: steps.version.outputs.release == 'true'
-
+      # Restored before the version is stamped, so the key does not change per release.
       - uses: Swatinem/rust-cache@v2
-        if: steps.version.outputs.release == 'true'
         with:
           workspaces: src-tauri
+          cache-on-failure: true
 
       # The version lives in git tags; the files are stamped for this build only.
       - name: Stamp the version
-        if: steps.version.outputs.release == 'true'
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           npm version "$VERSION" --no-git-tag-version --allow-same-version
           jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > conf.tmp && mv conf.tmp src-tauri/tauri.conf.json
           sed -i -E "0,/^version = \".*\"/s//version = \"$VERSION\"/" src-tauri/Cargo.toml
 
-      - name: Test
-        if: steps.version.outputs.release == 'true'
-        run: |
-          npm ci
-          npm run check
-          mkdir -p build
-          cargo test --manifest-path src-tauri/Cargo.toml --lib
-
       - name: Build
-        if: steps.version.outputs.release == 'true'
         env:
           # linuxdeploy is itself an AppImage; runners have no FUSE to mount it.
           APPIMAGE_EXTRACT_AND_RUN: "1"
-        run: npm run tauri build
+        run: |
+          npm ci
+          npm run tauri build
 
+      - name: Collect packages
+        run: |
+          mkdir dist
+          tar -C src-tauri/target/release -czf "dist/sobre-$VERSION-linux-x86_64.tar.gz" sobre
+          cp src-tauri/target/release/bundle/deb/*.deb \
+             src-tauri/target/release/bundle/rpm/*.rpm \
+             src-tauri/target/release/bundle/appimage/*.AppImage dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: [plan, test, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
       - name: Publish the release
-        if: steps.version.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.plan.outputs.version }}
         run: |
-          tar -C src-tauri/target/release -czf "sobre-$VERSION-linux-x86_64.tar.gz" sobre
           gh release create "v$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Sobre $VERSION" \
-            --notes-file release-notes.md \
-            "sobre-$VERSION-linux-x86_64.tar.gz" \
-            src-tauri/target/release/bundle/deb/*.deb \
-            src-tauri/target/release/bundle/rpm/*.rpm \
-            src-tauri/target/release/bundle/appimage/*.AppImage
+            --notes-file release-notes/release-notes.md \
+            packages/*
