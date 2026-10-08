@@ -129,6 +129,7 @@ export interface Settings {
   fetch_icons: boolean;
   auto_junk_failed: boolean;
   autostart: boolean;
+  check_updates: boolean;
   theme: Theme;
 }
 
@@ -212,6 +213,9 @@ export const api = {
 
   stats: () => invoke<Stats>("get_stats"),
   clearStorage: (what: "images" | "mail") => invoke<number>("clear_storage", { what }),
+  checkUpdate: (force = false) => invoke<{ version: string; notes: string; size: number } | null>("check_update", { force }),
+  installUpdate: () => invoke<string>("install_update"),
+  restart: () => invoke<void>("restart_app"),
   settings: () => invoke<Settings>("get_settings"),
   setSettings: (settings: Settings) => invoke<void>("set_settings", { settings }),
 };

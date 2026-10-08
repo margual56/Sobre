@@ -78,6 +78,7 @@
       </div>
       <label class="check"><input type="checkbox" bind:checked={settings.notifications} onchange={save} /> Notify me about new mail</label>
       <label class="check"><input type="checkbox" bind:checked={settings.autostart} onchange={save} /> Start in the background when I log in</label>
+      <label class="check"><input type="checkbox" bind:checked={settings.check_updates} onchange={save} /> Check for a new version when the app starts (AppImage only)</label>
       <label class="check"><input type="checkbox" bind:checked={settings.fetch_icons} onchange={save} /> Fetch sender icons from their websites</label>
       <label class="check"><input type="checkbox" bind:checked={settings.auto_junk_failed} onchange={save} /> Move mail that fails verification to Spam automatically</label>
       {#if !app.hasTray}

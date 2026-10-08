@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { actions, app, refreshStatus, startCompose, startListening, step, toast } from "$lib/app.svelte";
   import { errorText } from "$lib/format";
+  import UpdatePopup from "$lib/components/UpdatePopup.svelte";
   import TrayWarning from "$lib/components/TrayWarning.svelte";
   import AskDialog from "$lib/components/AskDialog.svelte";
   import AccountSetup from "$lib/components/AccountSetup.svelte";
@@ -86,6 +87,7 @@
 
 <AskDialog />
 {#if app.stage !== "loading"}<TrayWarning />{/if}
+{#if app.stage === "ready"}<UpdatePopup />{/if}
 
 {#if app.toast}<div class="toast selectable" role="status">{app.toast}</div>{/if}
 

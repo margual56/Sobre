@@ -846,9 +846,15 @@ pub struct Settings {
     fetch_icons: bool,
     auto_junk_failed: bool,
     autostart: bool,
+    #[serde(default = "yes")]
+    check_updates: bool,
     /// system | light | dark
     #[serde(default = "default_theme")]
     theme: String,
+}
+
+fn yes() -> bool {
+    true
 }
 
 fn default_theme() -> String {
@@ -868,6 +874,7 @@ pub fn get_settings(app: AppHandle, state: Shared) -> Cmd<Settings> {
             fetch_icons: on("fetch_icons", true)?,
             auto_junk_failed: on("auto_junk_failed", false)?,
             autostart: app.autolaunch().is_enabled().unwrap_or(false),
+            check_updates: on("check_updates", true)?,
             theme: db::get_setting(c, "theme")?.unwrap_or_else(default_theme),
         })
     }))
@@ -879,6 +886,7 @@ pub fn set_settings(app: AppHandle, state: Shared, settings: Settings) -> Cmd<()
         let bit = |b: bool| if b { "1" } else { "0" };
         db::set_setting(c, "notifications", bit(settings.notifications))?;
         db::set_setting(c, "fetch_icons", bit(settings.fetch_icons))?;
+        db::set_setting(c, "check_updates", bit(settings.check_updates))?;
         db::set_setting(c, "auto_junk_failed", bit(settings.auto_junk_failed))?;
         let theme = if matches!(settings.theme.as_str(), "light" | "dark") {
             settings.theme.as_str()
@@ -895,4 +903,57 @@ pub fn set_settings(app: AppHandle, state: Shared, settings: Settings) -> Cmd<()
         launcher.disable()
     }
     .map_err(|e| e.to_string())
+}
+
+/// Look for a newer release. Only AppImage copies can replace themselves, so
+/// other installs report nothing. `force` ignores the startup setting.
+#[tauri::command]
+pub async fn check_update(
+    app: AppHandle,
+    state: Shared<'_>,
+    force: bool,
+) -> Cmd<Option<crate::update::UpdateInfo>> {
+    if crate::update::running_appimage().is_none() {
+        return Ok(None);
+    }
+    let enabled =
+        fail(state.with_db(|c| db::get_setting(c, "check_updates")))?.as_deref() != Some("0");
+    if !enabled && !force {
+        return Ok(None);
+    }
+    fail(crate::update::check(&state.http, &app.package_info().version.to_string()).await)
+}
+
+#[tauri::command]
+pub async fn install_update(app: AppHandle, state: Shared<'_>) -> Cmd<String> {
+    use tauri::Emitter as _;
+    fail(
+        async {
+            let target = crate::update::running_appimage().ok_or_else(|| {
+                anyhow!(
+                    "this copy was not started from an AppImage file, so it cannot replace itself"
+                )
+            })?;
+            // Ask again rather than trusting anything the window sends.
+            let info = crate::update::check(&state.http, &app.package_info().version.to_string())
+                .await?
+                .ok_or_else(|| anyhow!("there is no newer version"))?;
+            let mut last = 0;
+            crate::update::install(&info, &target, |done, total| {
+                let percent = done * 100 / total.max(1);
+                if percent != last {
+                    last = percent;
+                    app.emit("update-progress", percent).ok();
+                }
+            })
+            .await?;
+            Ok(info.version)
+        }
+        .await,
+    )
+}
+
+#[tauri::command]
+pub fn restart_app(app: AppHandle) {
+    app.restart();
 }

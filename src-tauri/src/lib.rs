@@ -8,6 +8,7 @@ pub mod net;
 pub mod render;
 pub mod state;
 pub mod trust;
+pub mod update;
 
 use std::sync::Arc;
 
@@ -225,6 +226,9 @@ pub fn run() {
             commands::close_window,
             commands::get_stats,
             commands::clear_storage,
+            commands::check_update,
+            commands::install_update,
+            commands::restart_app,
             commands::get_settings,
             commands::set_settings,
         ])
