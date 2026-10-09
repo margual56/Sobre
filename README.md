@@ -2,6 +2,11 @@
 
 A small local email client: an action bar, a message list and a reader. Rust (Tauri 2) core with a SvelteKit UI.
 
+<img width="1310" height="918" alt="final_demo" src="https://github.com/user-attachments/assets/4fadc512-54a5-43b7-a3f1-8d7c99775334" />
+
+> [!IMPORTANT]
+> This image is a demo, all info is made up and any resemblance to reality is purely coincidental.
+
 ## Run
 
 ```sh
