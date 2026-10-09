@@ -28,6 +28,8 @@ The AppImage looks for a new version when it starts and can update itself.
 
 Linux on x86-64 only, for now.
 
+Just curious? You can [try it without signing in](#try-it-without-signing-in).
+
 ## What it does
 
 - **Several accounts in one inbox**, with search, and a switcher for accounts
@@ -167,11 +169,20 @@ If you would rather sign in through the browser, so that Sobre never holds a
 password, see [docs/google-oauth.md](docs/google-oauth.md). It needs a one-time
 setup on Google's side. The same page covers Microsoft accounts.
 
-## Trying it without your mail
+## Try it without signing in
 
-**Settings → Demo mailbox** swaps your mail for a made-up account with sample
-messages, including a phishing example. Your own accounts are closed while it
-is open. Handy for a look around, or for screenshots.
+You do not need an email account to look around. Sobre comes with a demo
+mailbox: a made-up account with sample messages, including a newsletter, a
+receipt with an attachment and a phishing example that shows the warnings.
+
+- **On first launch**, choose **Skip for now, open the demo account** in the
+  add-account dialog.
+- **Later**, use **Settings → Demo mailbox**, or start Sobre with `--demo`.
+
+While the demo is open your own accounts are closed and nothing in them
+changes. Sending and unsubscribing are switched off there. **Settings → Demo
+mailbox → Back to my mail** returns you to your accounts. It is also handy for
+screenshots.
 
 ## Troubleshooting
 
