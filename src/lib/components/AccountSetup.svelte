@@ -41,6 +41,16 @@
     }
   }
 
+  // The backend announces the switch and the app reloads itself around it.
+  async function openDemo() {
+    error = "";
+    try {
+      await api.enterDemo();
+    } catch (e) {
+      error = errorText(e);
+    }
+  }
+
   async function add() {
     if (!config) return;
     error = "";
@@ -82,7 +92,11 @@
         <label class="field"><span>Your name, as recipients will see it</span><input bind:value={name} /></label>
         {#if error}<p class="error selectable">{error}</p>{/if}
         <div class="row end">
-          {#if app.accounts.length}<button type="button" class="btn" onclick={onclose}>Cancel</button>{/if}
+          {#if app.accounts.length}
+            <button type="button" class="btn" onclick={onclose}>Cancel</button>
+          {:else if !app.demo}
+            <button type="button" class="skip" disabled={!!busy} onclick={openDemo}>Skip for now, open the demo account</button>
+          {/if}
           <button class="btn primary" disabled={!!busy}>{busy || "Continue"}</button>
         </div>
       </form>
@@ -134,6 +148,9 @@
 
 <style>
   .end { justify-content: flex-end; margin-top: 16px; }
+  .skip { border: 0; background: transparent; color: var(--accent); padding: 7px 0; border-radius: 7px; margin-right: auto; }
+  .skip:hover:not(:disabled) { text-decoration: underline; }
+  .skip:disabled { opacity: 0.5; cursor: default; }
   .box { border: 1px solid var(--line); border-radius: 9px; padding: 12px 12px 2px; margin: 10px 0; }
   .box p { margin: 0 0 10px; }
   .grid { display: grid; grid-template-columns: 1fr 90px; gap: 0 10px; }
