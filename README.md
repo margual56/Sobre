@@ -74,6 +74,41 @@ website, and the update check against GitHub.
 Opening an attachment in another program necessarily writes a decrypted copy;
 it goes to a private in-memory folder and is removed when Sobre exits.
 
+## How this was built, and why it trusts so little
+
+Most of Sobre's code was written with an AI coding assistant (Claude), working
+from my design and under my direction. I decided what it should do and how it
+should behave.
+
+That is one reason the design assumes as little as possible. Sobre is built so
+that no single piece has to be right for you to stay safe, whoever or whatever
+wrote it:
+
+- **Mail is treated as hostile.** Nothing a sender writes is trusted: not the
+  HTML, not the links, not the images, not the headers claiming the message
+  passed its checks. Only your own provider's verdict and signatures Sobre
+  verifies itself count.
+- **Several independent layers, not one filter.** A message is cleaned, then
+  shown in a sandbox with scripts off, on an origin separate from the app,
+  under a policy that lets it load nothing. The last three are enforced by the
+  browser engine, not by Sobre's own code, so a mistake in the cleaning step
+  alone does not let a message run code or reach the app.
+- **The interface cannot reach the network.** Every connection is made by the
+  Rust core, and anything fetched because a message asked for it is limited to
+  public addresses and stripped of cookies.
+- **No server to trust.** There is no Sobre account, backend or telemetry.
+  Your mail goes between your computer and your provider, and is encrypted on
+  disk.
+- **Updates are checked before they replace anything.** A download that does
+  not match the published checksum is discarded.
+
+What this does not mean: you are still trusting the app itself with your mail
+and passwords, as with any mail client. The security-sensitive parts (cleaning
+HTML, the encrypted store, sender verification, the update check) have
+automated tests you can read in `src-tauri/src`, but Sobre has not had an
+independent security audit. Treat it as a young project. Reviews and bug
+reports are very welcome, especially of those parts.
+
 ## Adding an account
 
 Enter your address and Sobre finds the servers. Most providers then just need
