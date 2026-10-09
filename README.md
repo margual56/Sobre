@@ -80,34 +80,74 @@ Most of Sobre's code was written with an AI coding assistant (Claude), working
 from my design and under my direction. I decided what it should do and how it
 should behave.
 
-That is one reason the design assumes as little as possible. Sobre is built so
-that no single piece has to be right for you to stay safe, whoever or whatever
-wrote it:
+That is one reason the design assumes as little as possible: no single piece
+has to be right for you to stay safe, whoever or whatever wrote it. It is also
+why nothing below asks you to take my word for it. Each claim links to the code
+that implements it, the tests that exercise it, or the standard it follows.
 
-- **Mail is treated as hostile.** Nothing a sender writes is trusted: not the
-  HTML, not the links, not the images, not the headers claiming the message
-  passed its checks. Only your own provider's verdict and signatures Sobre
-  verifies itself count.
-- **Several independent layers, not one filter.** A message is cleaned, then
-  shown in a sandbox with scripts off, on an origin separate from the app,
-  under a policy that lets it load nothing. The last three are enforced by the
-  browser engine, not by Sobre's own code, so a mistake in the cleaning step
-  alone does not let a message run code or reach the app.
-- **The interface cannot reach the network.** Every connection is made by the
-  Rust core, and anything fetched because a message asked for it is limited to
-  public addresses and stripped of cookies.
-- **No server to trust.** There is no Sobre account, backend or telemetry.
-  Your mail goes between your computer and your provider, and is encrypted on
-  disk.
-- **Updates are checked before they replace anything.** A download that does
-  not match the published checksum is discarded.
+You are still trusting the app itself with your mail and passwords, as with any
+mail client, and Sobre has not had an independent security audit. Treat it as a
+young project. Reviews and bug reports are very welcome.
 
-What this does not mean: you are still trusting the app itself with your mail
-and passwords, as with any mail client. The security-sensitive parts (cleaning
-HTML, the encrypted store, sender verification, the update check) have
-automated tests you can read in `src-tauri/src`, but Sobre has not had an
-independent security audit. Treat it as a young project. Reviews and bug
-reports are very welcome, especially of those parts.
+## Check it yourself
+
+### Where your password goes
+
+Your password, app password or sign-in token is written in one place and read
+in one place:
+
+- **Stored** by [`accounts/secrets.rs`](src-tauri/src/accounts/secrets.rs): in the system
+  wallet through the [Secret Service API](https://specifications.freedesktop.org/secret-service-spec/latest/),
+  or inside the encrypted database in passphrase mode.
+- **Read** only by `login_for` in [`accounts/mod.rs`](src-tauri/src/accounts/mod.rs),
+  which hands it to exactly two callers: the IMAP sign-in in
+  [`mail/imap.rs`](src-tauri/src/mail/imap.rs) and the SMTP sign-in in
+  [`mail/smtp.rs`](src-tauri/src/mail/smtp.rs). Both connect, over TLS checked against
+  your system's certificates, to the servers shown when you added the account.
+- **Browser sign-in** follows the OAuth rules for desktop apps
+  ([RFC 8252](https://www.rfc-editor.org/rfc/rfc8252), with PKCE,
+  [RFC 7636](https://www.rfc-editor.org/rfc/rfc7636)). The only token
+  endpoints are Google's and Microsoft's, written out in
+  [`accounts/oauth.rs`](src-tauri/src/accounts/oauth.rs).
+
+Searching the source for `secrets::get` shows there is no other reader.
+
+### Every connection Sobre makes
+
+This is the complete list. The interface cannot add to it (see the next table),
+so the Rust files named here are the only code that opens a connection.
+
+| Connects to | When | What is sent | Code |
+|---|---|---|---|
+| Your provider's IMAP and SMTP servers | Always | Your sign-in and your mail | [`mail/imap.rs`](src-tauri/src/mail/imap.rs), [`mail/smtp.rs`](src-tauri/src/mail/smtp.rs) |
+| Google or Microsoft sign-in | Browser sign-in only | The OAuth exchange | [`accounts/oauth.rs`](src-tauri/src/accounts/oauth.rs) |
+| `autoconfig.thunderbird.net` | Adding an account from an unknown provider | Your address's domain, never the address | [`accounts/discovery.rs`](src-tauri/src/accounts/discovery.rs) |
+| Your DNS resolver | Adding an account; checking a sender | Lookups for the sender's domain (signature key, policy, logo) | [`trust/auth.rs`](src-tauri/src/trust/auth.rs), [`icons/mod.rs`](src-tauri/src/icons/mod.rs) |
+| The sender's website | Showing a sender icon (can be turned off) | A request for its icon | [`icons/mod.rs`](src-tauri/src/icons/mod.rs) |
+| Image hosts named in a message | Only after you click "Show images" | A plain request, no cookies or referrer | [`render/protocol.rs`](src-tauri/src/render/protocol.rs), [`net.rs`](src-tauri/src/net.rs) |
+| The sender's unsubscribe address | Only when you click Unsubscribe | The one-click request ([RFC 8058](https://www.rfc-editor.org/rfc/rfc8058)) or an email | [`commands.rs`](src-tauri/src/commands.rs) |
+| `api.github.com` and GitHub downloads | Update check at start, AppImage only (can be turned off) | Nothing about you | [`update.rs`](src-tauri/src/update.rs) |
+
+Two details worth knowing: DNS lookups tell your resolver which domains write
+to you, and if your system has no resolver configured Sobre falls back to
+Cloudflare's over TLS ([`state.rs`](src-tauri/src/state.rs)).
+
+### The claims, one by one
+
+| Claim | How it is done | Where to look |
+|---|---|---|
+| The interface has no network access of its own | The window runs under a content security policy that allows connections only to the app's own core, and it is granted no plugin that can open one. It can only call the fixed list of commands the core registers. | Policy: `csp` in [`tauri.conf.json`](src-tauri/tauri.conf.json) ([CSP Level 3](https://www.w3.org/TR/CSP3/)). Grants: [`capabilities/default.json`](src-tauri/capabilities/default.json). Commands: `invoke_handler` in [`lib.rs`](src-tauri/src/lib.rs) |
+| Message HTML cannot run code | Allow-list cleaning with [ammonia](https://github.com/rust-ammonia/ammonia), which parses HTML the way browsers do: only known-safe tags, attributes, URL schemes and CSS properties survive. Scripts, forms, frames, event handlers and `<style>` rules that could load anything are dropped. | [`render/sanitize.rs`](src-tauri/src/render/sanitize.rs); the hostile-input test `hostile_markup_is_removed` is at the bottom of that file |
+| A mistake in the cleaning step alone is not enough | The cleaned message is shown in an [`<iframe sandbox>`](https://html.spec.whatwg.org/multipage/iframe-embed-object.html#attr-iframe-sandbox) with no permissions (no scripts, no same-origin access), served from its own `mailbody://` origin with a policy of `default-src 'none'`. These three are enforced by the browser engine. | Sandbox: [`Reader.svelte`](src/lib/components/Reader.svelte). Origin and policy: [`render/protocol.rs`](src-tauri/src/render/protocol.rs), `BODY_CSP` in [`render/mod.rs`](src-tauri/src/render/mod.rs) |
+| A message cannot load anything or reveal that you opened it | Remote images are removed during cleaning unless you allow them for that message. Allowed images are fetched by the core through a per-session secret path a message cannot guess, without cookies or referrer. | `attribute_filter` in [`render/sanitize.rs`](src-tauri/src/render/sanitize.rs); [`render/protocol.rs`](src-tauri/src/render/protocol.rs) |
+| Mail cannot be used to reach your local network | Anything fetched because a message asked for it must resolve to a public address, and the checked address is pinned for the request. Redirects are followed by hand so each hop is checked. | `is_public` and `client_for` in [`net.rs`](src-tauri/src/net.rs), with tests |
+| Links cannot open on their own | The window refuses to navigate anywhere a message points; the link is handed to the interface, which shows the real destination and waits for you. Links whose text names another site are flagged. | `allow_navigation` in [`lib.rs`](src-tauri/src/lib.rs); `find_deceptive_links` in [`render/sanitize.rs`](src-tauri/src/render/sanitize.rs) |
+| A sender cannot fake its own verification | Signatures are verified locally with [mail-auth](https://github.com/stalwartlabs/mail-auth) (DKIM, [RFC 6376](https://www.rfc-editor.org/rfc/rfc6376)) and compared with the From domain and its published policy (DMARC, [RFC 7489](https://www.rfc-editor.org/rfc/rfc7489)). An `Authentication-Results` header ([RFC 8601](https://www.rfc-editor.org/rfc/rfc8601)) is believed only when it is the topmost one and was written by your own provider. | `verify`, `decide` and `authserv_is_trusted` in [`trust/auth.rs`](src-tauri/src/trust/auth.rs), with tests; lookalike checks in [`trust/heuristics.rs`](src-tauri/src/trust/heuristics.rs) |
+| Your mail is encrypted on disk | One [SQLCipher](https://www.zetetic.net/sqlcipher/design/) database (AES-256, every page authenticated) holds everything, search index included. In passphrase mode the key comes from Argon2id ([RFC 9106](https://www.rfc-editor.org/rfc/rfc9106); 64 MiB, 3 passes) and is never stored. The window keeps no cache or storage on disk. | [`db/mod.rs`](src-tauri/src/db/mod.rs), [`db/key.rs`](src-tauri/src/db/key.rs); the test `file_is_encrypted_and_wrong_key_fails`; `incognito` in [`lib.rs`](src-tauri/src/lib.rs) |
+| An update cannot swap in something else | The download must come from this repository's releases and match the size and SHA-256 GitHub publishes for it, or the old file is left alone. It is not signed by me, so this rests on GitHub and HTTPS. | `pick_update` and `put_in_place` in [`update.rs`](src-tauri/src/update.rs), with tests |
+| What you download is built from this source | Releases are built by GitHub Actions from the tagged commit. The builds are not reproducible, so this is as trustworthy as the workflow file and GitHub. | [`.github/workflows/release.yml`](.github/workflows/release.yml) |
+
+To run the tests yourself: `cd src-tauri && cargo test --lib`.
 
 ## Adding an account
 
