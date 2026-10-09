@@ -1017,3 +1017,41 @@ pub async fn leave_demo(state: Shared<'_>) -> Cmd<()> {
     shared.emit(crate::state::Event::Reset);
     Ok(())
 }
+
+#[tauri::command]
+pub fn install_status() -> crate::install::InstallStatus {
+    crate::install::status()
+}
+
+/// Copy this AppImage to the user's programs folder and add it to the menu.
+#[tauri::command]
+pub async fn install_app() -> Cmd<crate::install::InstallStatus> {
+    fail(
+        tokio::task::spawn_blocking(|| {
+            let source = crate::update::running_appimage()
+                .ok_or_else(|| anyhow!("only the AppImage download can install itself; this copy was installed another way"))?;
+            let places = crate::install::Places::for_user()?;
+            crate::install::install(&source, &places)?;
+            crate::install::refresh_menus(&places);
+            Ok(crate::install::status())
+        })
+        .await
+        .map_err(|e| anyhow!(e))
+        .and_then(|r| r),
+    )
+}
+
+#[tauri::command]
+pub async fn uninstall_app() -> Cmd<crate::install::InstallStatus> {
+    fail(
+        tokio::task::spawn_blocking(|| {
+            let places = crate::install::Places::for_user()?;
+            crate::install::uninstall(&places)?;
+            crate::install::refresh_menus(&places);
+            Ok(crate::install::status())
+        })
+        .await
+        .map_err(|e| anyhow!(e))
+        .and_then(|r| r),
+    )
+}

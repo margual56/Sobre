@@ -4,6 +4,7 @@ pub mod commands;
 pub mod db;
 pub mod demo;
 pub mod icons;
+pub mod install;
 pub mod mail;
 pub mod net;
 pub mod render;
@@ -242,6 +243,9 @@ pub fn run() {
             commands::restart_app,
             commands::enter_demo,
             commands::leave_demo,
+            commands::install_status,
+            commands::install_app,
+            commands::uninstall_app,
             commands::get_settings,
             commands::set_settings,
         ])

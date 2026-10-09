@@ -152,6 +152,13 @@ export interface Stats {
   accounts: [string, number][];
 }
 
+export interface InstallStatus {
+  available: boolean;
+  installed: boolean;
+  running_installed: boolean;
+  program: string;
+}
+
 export interface OAuthClient {
   provider: string;
   client_id: string;
@@ -220,6 +227,9 @@ export const api = {
   restart: () => invoke<void>("restart_app"),
   enterDemo: () => invoke<void>("enter_demo"),
   leaveDemo: () => invoke<void>("leave_demo"),
+  installStatus: () => invoke<InstallStatus>("install_status"),
+  installApp: () => invoke<InstallStatus>("install_app"),
+  uninstallApp: () => invoke<InstallStatus>("uninstall_app"),
   settings: () => invoke<Settings>("get_settings"),
   setSettings: (settings: Settings) => invoke<void>("set_settings", { settings }),
 };
