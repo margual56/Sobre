@@ -119,6 +119,15 @@
       </div>
     {/if}
 
+    <h3>Demo mailbox</h3>
+    {#if app.demo}
+      <p>You are looking at made-up mail. Your own accounts are closed and untouched.</p>
+      <button class="btn small" onclick={() => attempt(api.leaveDemo)}>Back to my mail</button>
+    {:else}
+      <p>Swap your mail for a made-up account with sample messages, so you can take screenshots without showing anything private. Your accounts are closed while it is open and nothing in them changes.</p>
+      <button class="btn small" onclick={() => attempt(api.enterDemo)}>Open the demo mailbox</button>
+    {/if}
+
     <div class="about">
       <span class="muted">Sobre {version}</span>
       <button class="btn small" onclick={() => (app.dialog = "stats")}><ChartColumn size={14} />Statistics and storage…</button>

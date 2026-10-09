@@ -2,6 +2,7 @@ pub mod accounts;
 pub mod actions;
 pub mod commands;
 pub mod db;
+pub mod demo;
 pub mod icons;
 pub mod mail;
 pub mod net;
@@ -172,7 +173,17 @@ pub fn run() {
         .ok();
 
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // `sobre --demo` while already running switches this instance over.
+            if args.iter().any(|a| a == "--demo") {
+                let state = app.state::<Arc<AppState>>();
+                if !state.is_demo() {
+                    state
+                        .enter_demo()
+                        .map_err(|e| log::error!("demo mailbox: {e:#}"))
+                        .ok();
+                }
+            }
             show_main(app)
         }))
         .plugin(tauri_plugin_opener::init())
@@ -229,6 +240,8 @@ pub fn run() {
             commands::check_update,
             commands::install_update,
             commands::restart_app,
+            commands::enter_demo,
+            commands::leave_demo,
             commands::get_settings,
             commands::set_settings,
         ])
@@ -244,8 +257,16 @@ pub fn run() {
             }));
             app.manage(state.clone());
 
+            let demo = std::env::args().any(|a| a == "--demo");
+            if demo {
+                state
+                    .enter_demo()
+                    .map_err(|e| log::error!("demo mailbox: {e:#}"))
+                    .ok();
+            }
             // Wallet mode opens without asking; passphrase mode waits for the user.
-            if let Ok(Some(KeyConfig {
+            if demo {
+            } else if let Ok(Some(KeyConfig {
                 mode: KeyMode::Wallet,
                 ..
             })) = KeyConfig::load(&state.data_dir)

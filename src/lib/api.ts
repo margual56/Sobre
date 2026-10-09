@@ -7,6 +7,7 @@ export interface Status {
   stage: Exclude<Stage, "loading">;
   key_mode: KeyMode | null;
   has_tray: boolean;
+  demo: boolean;
   tray_problem: string | null;
 }
 
@@ -164,6 +165,7 @@ export type BackendEvent =
   | { type: "sync_status"; account_id: number; state: string; detail: string }
   | { type: "sent" }
   | { type: "theme_changed" }
+  | { type: "reset" }
   | { type: "locked" };
 
 export const api = {
@@ -216,6 +218,8 @@ export const api = {
   checkUpdate: (force = false) => invoke<{ version: string; notes: string; size: number } | null>("check_update", { force }),
   installUpdate: () => invoke<string>("install_update"),
   restart: () => invoke<void>("restart_app"),
+  enterDemo: () => invoke<void>("enter_demo"),
+  leaveDemo: () => invoke<void>("leave_demo"),
   settings: () => invoke<Settings>("get_settings"),
   setSettings: (settings: Settings) => invoke<void>("set_settings", { settings }),
 };

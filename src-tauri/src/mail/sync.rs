@@ -28,6 +28,10 @@ const HEADER_CHUNK: usize = 100;
 const BODY_CHUNK: usize = 10;
 
 pub fn start(state: &Arc<AppState>, account_id: i64) {
+    // The demo account does not exist anywhere.
+    if state.is_demo() {
+        return;
+    }
     let (tx, rx) = unbounded_channel();
     if let Some(old) = state.syncers.lock().unwrap().insert(account_id, tx) {
         old.send(SyncCmd::Stop).ok();
