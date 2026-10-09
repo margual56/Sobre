@@ -68,6 +68,7 @@
       <button class="btn primary" disabled={busy || (app.keyMode === "passphrase" && !passphrase)}>{busy ? "Unlocking…" : app.keyMode === "passphrase" ? "Unlock" : "Try again"}</button>
     </form>
   {/if}
+  <button class="demo" onclick={() => api.enterDemo().catch((e) => (error = errorText(e)))}>Look around with a demo mailbox</button>
 </main>
 
 <style>
@@ -82,4 +83,6 @@
   .option input { display: none; }
   .option :global(svg) { flex: none; margin-top: 2px; }
   .btn { justify-content: center; }
+  main { position: relative; }
+  .demo { position: absolute; bottom: 18px; left: 0; right: 0; margin: auto; width: fit-content; border: 0; background: none; color: var(--muted); font-size: 13px; text-decoration: underline; }
 </style>

@@ -93,7 +93,7 @@
         <p>{providerName} accounts sign in through your browser. The app never sees your password.</p>
         {#if !clientSaved}
           <div class="box">
-            <p><b>One-time setup.</b> {providerName} requires each mail app to identify itself with an OAuth client that you create (free, about five minutes). The README has the steps.</p>
+            <p><b>One-time setup.</b> {providerName} requires each mail app to identify itself with an OAuth client that you create (free, about five minutes). The steps are in <code>docs/google-oauth.md</code> on the project page.</p>
             <label class="field"><span>Client ID</span><input bind:value={clientId} spellcheck="false" /></label>
             <label class="field"><span>Client secret {provider === "microsoft" ? "(leave empty)" : ""}</span><input bind:value={clientSecret} spellcheck="false" /></label>
           </div>

@@ -21,6 +21,7 @@ export const app = $state({
   stage: "loading" as Stage,
   keyMode: null as KeyMode | null,
   hasTray: false,
+  demo: false,
   trayProblem: null as string | null,
   accounts: [] as Account[],
   folders: [] as Folder[],
@@ -102,6 +103,7 @@ export async function refreshStatus() {
   app.stage = status.stage;
   app.keyMode = status.key_mode;
   app.hasTray = status.has_tray;
+  app.demo = status.demo;
   app.trayProblem = status.tray_problem;
   if (status.stage === "ready") {
     await loadTheme();
@@ -297,6 +299,17 @@ export async function startListening() {
         break;
       case "sent":
         toast("Message sent.");
+        break;
+      case "reset":
+        // Another mailbox is behind the window now; forget everything shown.
+        app.messages = [];
+        app.detail = null;
+        app.selectedId = null;
+        app.compose = null;
+        app.dialog = null;
+        app.sync = {};
+        app.filter = { accountId: null, role: "inbox", folderId: null, search: "" };
+        void refreshStatus();
         break;
       case "locked":
         app.stage = "locked";

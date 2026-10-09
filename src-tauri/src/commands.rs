@@ -34,6 +34,7 @@ pub struct Status {
     stage: &'static str,
     key_mode: Option<KeyMode>,
     has_tray: bool,
+    demo: bool,
     /// `missing-library`, or the error the tray gave.
     tray_problem: Option<String>,
 }
@@ -42,6 +43,7 @@ pub struct Status {
 pub fn app_status(state: Shared) -> Cmd<Status> {
     let config = fail(KeyConfig::load(&state.data_dir))?;
     let stage = match (&config, state.is_unlocked()) {
+        _ if state.is_demo() => "ready",
         (None, _) => "new",
         (Some(_), true) => "ready",
         (Some(_), false) => "locked",
@@ -52,6 +54,7 @@ pub fn app_status(state: Shared) -> Cmd<Status> {
         stage,
         key_mode: config.map(|c| c.mode),
         has_tray: tray_problem.is_none(),
+        demo: state.is_demo(),
         tray_problem,
     })
 }
@@ -78,6 +81,9 @@ pub async fn create_store(state: Shared<'_>, passphrase: Option<String>) -> Cmd<
 
 #[tauri::command]
 pub async fn unlock(state: Shared<'_>, passphrase: Option<String>) -> Cmd<()> {
+    if state.is_demo() {
+        return Err("Not available in the demo mailbox.".into());
+    }
     let shared = state.inner().clone();
     let worker = shared.clone();
     // Argon2 is deliberately slow; keep it off the UI thread.
@@ -93,6 +99,9 @@ pub async fn unlock(state: Shared<'_>, passphrase: Option<String>) -> Cmd<()> {
 
 #[tauri::command]
 pub fn lock(state: Shared) -> Cmd<()> {
+    if state.is_demo() {
+        return Err("Not available in the demo mailbox.".into());
+    }
     if state.mode() != Some(KeyMode::Passphrase) {
         return Err(
             "locking needs passphrase mode; in wallet mode the key is always available".into(),
@@ -104,6 +113,9 @@ pub fn lock(state: Shared) -> Cmd<()> {
 
 #[tauri::command]
 pub async fn set_key_mode(state: Shared<'_>, mode: KeyMode, passphrase: Option<String>) -> Cmd<()> {
+    if state.is_demo() {
+        return Err("Not available in the demo mailbox.".into());
+    }
     let state = state.inner().clone();
     fail(
         tokio::task::spawn_blocking(move || state.change_key_mode(mode, passphrase.as_deref()))
@@ -136,6 +148,9 @@ pub struct NewAccount {
 
 #[tauri::command]
 pub async fn add_account(app: AppHandle, state: Shared<'_>, account: NewAccount) -> Cmd<Account> {
+    if state.is_demo() {
+        return Err("Not available in the demo mailbox.".into());
+    }
     let state = state.inner().clone();
     fail(add_account_inner(app, state, account).await)
 }
@@ -427,6 +442,9 @@ fn unsubscribe_plan(raw: &[u8], rendered_document: &str) -> Option<UnsubscribePl
 
 #[tauri::command]
 pub async fn unsubscribe(state: Shared<'_>, id: i64) -> Cmd<Option<String>> {
+    if state.is_demo() {
+        return Err("Not available in the demo mailbox.".into());
+    }
     let state = state.inner().clone();
     fail(
         async {
@@ -641,6 +659,9 @@ pub async fn pick_files(app: AppHandle) -> Cmd<Vec<String>> {
 
 #[tauri::command]
 pub async fn send_message(state: Shared<'_>, draft: smtp::Draft) -> Cmd<()> {
+    if state.is_demo() {
+        return Err("Not available in the demo mailbox.".into());
+    }
     let state = state.inner().clone();
     fail(
         async {
@@ -956,4 +977,81 @@ pub async fn install_update(app: AppHandle, state: Shared<'_>) -> Cmd<String> {
 #[tauri::command]
 pub fn restart_app(app: AppHandle) {
     app.restart();
+}
+
+/// Show a mailbox of made-up mail in place of the real one.
+#[tauri::command]
+pub async fn enter_demo(state: Shared<'_>) -> Cmd<()> {
+    let state = state.inner().clone();
+    fail(
+        tokio::task::spawn_blocking(move || state.enter_demo())
+            .await
+            .map_err(|e| anyhow!(e))
+            .and_then(|r| r),
+    )
+}
+
+/// Back to the real mailbox. Wallet mode reopens by itself; passphrase mode
+/// lands on the unlock screen.
+#[tauri::command]
+pub async fn leave_demo(state: Shared<'_>) -> Cmd<()> {
+    let shared = state.inner().clone();
+    if !shared.is_demo() {
+        return Ok(());
+    }
+    shared.leave_demo();
+    if let Ok(Some(KeyConfig {
+        mode: KeyMode::Wallet,
+        ..
+    })) = KeyConfig::load(&shared.data_dir)
+    {
+        let worker = shared.clone();
+        fail(
+            tokio::task::spawn_blocking(move || worker.unlock(None))
+                .await
+                .map_err(|e| anyhow!(e))
+                .and_then(|r| r),
+        )?;
+        sync::start_all(&shared);
+    }
+    shared.emit(crate::state::Event::Reset);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn install_status() -> crate::install::InstallStatus {
+    crate::install::status()
+}
+
+/// Copy this AppImage to the user's programs folder and add it to the menu.
+#[tauri::command]
+pub async fn install_app() -> Cmd<crate::install::InstallStatus> {
+    fail(
+        tokio::task::spawn_blocking(|| {
+            let source = crate::update::running_appimage()
+                .ok_or_else(|| anyhow!("only the AppImage download can install itself; this copy was installed another way"))?;
+            let places = crate::install::Places::for_user()?;
+            crate::install::install(&source, &places)?;
+            crate::install::refresh_menus(&places);
+            Ok(crate::install::status())
+        })
+        .await
+        .map_err(|e| anyhow!(e))
+        .and_then(|r| r),
+    )
+}
+
+#[tauri::command]
+pub async fn uninstall_app() -> Cmd<crate::install::InstallStatus> {
+    fail(
+        tokio::task::spawn_blocking(|| {
+            let places = crate::install::Places::for_user()?;
+            crate::install::uninstall(&places)?;
+            crate::install::refresh_menus(&places);
+            Ok(crate::install::status())
+        })
+        .await
+        .map_err(|e| anyhow!(e))
+        .and_then(|r| r),
+    )
 }

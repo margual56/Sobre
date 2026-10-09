@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getVersion } from "@tauri-apps/api/app";
-  import { ChartColumn, Trash2, X } from "@lucide/svelte";
-  import { api, type Settings } from "$lib/api";
+  import { ChartColumn, HardDriveDownload, Trash2, X } from "@lucide/svelte";
+  import { api, type InstallStatus, type Settings } from "$lib/api";
   import { app, applyTheme, ask, attempt, loadEverything, refreshStatus, toast } from "$lib/app.svelte";
 
   let settings = $state<Settings | null>(null);
@@ -17,6 +17,27 @@
     settings = await api.settings();
     blocked = await api.blocked();
   });
+
+  let install = $state<InstallStatus | null>(null);
+  void api.installStatus().then((s) => (install = s)).catch(() => {});
+
+  async function installApp() {
+    working = true;
+    const done = await attempt(api.installApp);
+    working = false;
+    if (done) {
+      install = done;
+      toast("Sobre is installed. You will find it in your application menu.");
+    }
+  }
+  async function uninstall() {
+    if (!(await ask("Remove Sobre from the application menu and delete the installed program? Your mail and settings stay.", "Uninstall"))) return;
+    const done = await attempt(api.uninstallApp);
+    if (done) {
+      install = done;
+      toast("Sobre was uninstalled. Your mail and settings were kept.");
+    }
+  }
 
   const save = () => attempt(() => api.setSettings($state.snapshot(settings!)));
 
@@ -117,6 +138,28 @@
         <button class="btn small" onclick={() => attempt(api.lock)}>Lock now</button>
         <button class="btn small" disabled={working} onclick={() => switchMode("wallet")}>Keep the key in the system wallet instead</button>
       </div>
+    {/if}
+
+    {#if install && (install.available || install.installed)}
+      <h3>Installation</h3>
+      {#if install.installed}
+        <p>Sobre is installed: it is in your application menu and lives at <code class="selectable">{install.program}</code>.
+          {#if install.available && !install.running_installed}This window is still running from the downloaded file. Quit and start Sobre from the menu; after that you can delete the download.{/if}
+        </p>
+        <button class="btn small danger" onclick={uninstall}>Uninstall</button>
+      {:else}
+        <p>You are running Sobre straight from the downloaded file. Installing copies it to <code class="selectable">{install.program}</code> and adds it, with its icon, to your application menu.</p>
+        <button class="btn small primary" disabled={working} onclick={installApp}><HardDriveDownload size={14} />Install</button>
+      {/if}
+    {/if}
+
+    <h3>Demo mailbox</h3>
+    {#if app.demo}
+      <p>You are looking at made-up mail. Your own accounts are closed and untouched.</p>
+      <button class="btn small" onclick={() => attempt(api.leaveDemo)}>Back to my mail</button>
+    {:else}
+      <p>Swap your mail for a made-up account with sample messages, so you can take screenshots without showing anything private. Your accounts are closed while it is open and nothing in them changes.</p>
+      <button class="btn small" onclick={() => attempt(api.enterDemo)}>Open the demo mailbox</button>
     {/if}
 
     <div class="about">

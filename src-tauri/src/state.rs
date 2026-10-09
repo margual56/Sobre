@@ -41,6 +41,8 @@ pub enum Event {
     Sent,
     ThemeChanged,
     Locked,
+    /// The store behind the window was swapped; start over.
+    Reset,
 }
 
 pub enum SyncCmd {
@@ -64,6 +66,7 @@ pub struct AppState {
     pub verify_slots: Arc<Semaphore>,
     pub temp_files: Mutex<Vec<PathBuf>>,
     pub tray_problem: Mutex<Option<String>>,
+    demo: std::sync::atomic::AtomicBool,
     pub compose_drafts: Mutex<HashMap<u32, serde_json::Value>>,
     sink: Mutex<Option<EventSink>>,
 }
@@ -87,6 +90,7 @@ impl AppState {
             temp_files: Mutex::default(),
             compose_drafts: Mutex::default(),
             tray_problem: Mutex::default(),
+            demo: Default::default(),
             sink: Mutex::new(None),
         })
     }
@@ -174,6 +178,44 @@ impl AppState {
         let conn = db::open(&self.data_dir, &key)?;
         self.install(conn, config.mode);
         Ok(())
+    }
+
+    pub fn is_demo(&self) -> bool {
+        self.demo.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    fn close_store(&self) {
+        for (_, tx) in self.syncers.lock().unwrap().drain() {
+            tx.send(SyncCmd::Stop).ok();
+        }
+        *self.db.lock().unwrap() = None;
+        self.images_allowed.lock().unwrap().clear();
+        self.compose_drafts.lock().unwrap().clear();
+        self.remove_temp_files();
+    }
+
+    /// Swap in a throwaway store of made-up mail, for screenshots. It lives
+    /// beside the real one and is rebuilt on every entry; the real store is
+    /// closed, not touched.
+    pub fn enter_demo(&self) -> Result<()> {
+        self.close_store();
+        let dir = self.data_dir.join("demo");
+        if dir.exists() {
+            std::fs::remove_dir_all(&dir)?;
+        }
+        // Nothing in there is private, so the key is not a secret.
+        let conn = db::open(&dir, &Zeroizing::new(*b"sobre-demo-mailbox-not-a-secret!"))?;
+        crate::demo::seed(&conn)?;
+        *self.db.lock().unwrap() = Some(conn);
+        self.demo.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.emit(Event::Reset);
+        Ok(())
+    }
+
+    /// Close the demo store. The caller reopens the real one.
+    pub fn leave_demo(&self) {
+        self.close_store();
+        self.demo.store(false, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Drop the key and every decrypted thing held in memory.

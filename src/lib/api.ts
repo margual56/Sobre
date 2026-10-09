@@ -7,6 +7,7 @@ export interface Status {
   stage: Exclude<Stage, "loading">;
   key_mode: KeyMode | null;
   has_tray: boolean;
+  demo: boolean;
   tray_problem: string | null;
 }
 
@@ -151,6 +152,13 @@ export interface Stats {
   accounts: [string, number][];
 }
 
+export interface InstallStatus {
+  available: boolean;
+  installed: boolean;
+  running_installed: boolean;
+  program: string;
+}
+
 export interface OAuthClient {
   provider: string;
   client_id: string;
@@ -164,6 +172,7 @@ export type BackendEvent =
   | { type: "sync_status"; account_id: number; state: string; detail: string }
   | { type: "sent" }
   | { type: "theme_changed" }
+  | { type: "reset" }
   | { type: "locked" };
 
 export const api = {
@@ -216,6 +225,11 @@ export const api = {
   checkUpdate: (force = false) => invoke<{ version: string; notes: string; size: number } | null>("check_update", { force }),
   installUpdate: () => invoke<string>("install_update"),
   restart: () => invoke<void>("restart_app"),
+  enterDemo: () => invoke<void>("enter_demo"),
+  leaveDemo: () => invoke<void>("leave_demo"),
+  installStatus: () => invoke<InstallStatus>("install_status"),
+  installApp: () => invoke<InstallStatus>("install_app"),
+  uninstallApp: () => invoke<InstallStatus>("uninstall_app"),
   settings: () => invoke<Settings>("get_settings"),
   setSettings: (settings: Settings) => invoke<void>("set_settings", { settings }),
 };
